@@ -1,0 +1,24 @@
+# CP2K BondDOS 配置示例：  CP2K_BondDOS.exe 不需要它；命令行用法  python main.py cohp cohp.in
+MOKP = cohp_mo-1_0.mokp
+KS_DIR = .
+# KS_PATTERN = cohp_ks-KS_SPIN_*_K_*-1_0.csr     # 文件夹里有多组 KS 文件时指定
+PERIODIC = XYZ
+CSR_TRIANGLE = FULL
+COHP_BASIS = AO              # AO = 直接 Gaussian AO；LOWDIN = 正交化（类 LOBSTER）
+COOP = T
+COBI = T
+ORBITAL_RESOLUTION = L       # NONE | L | LM | SHELL | AO（对带 ORB 的键生效）
+SPIN = AUTO
+FWHM_EV = 0.2355             # 也可写 SIGMA_EV = 0.10（高斯标准差）
+EMIN_EV = -15
+EMAX_EV = 10
+DE_EV = 0.01
+EF_EV = auto                 # auto | hoco | midgap | fermi | 绝对能量数值(eV)
+# ELECTRONS = 96             # 可选：核对电子数
+BOND = 1 2 ORB               # 最近镜像，并做轨道分解
+BOND = 1 3 ALL               # 所有等距最近镜像
+BOND = 2 4 -1 0 0            # 指定晶格平移（原始坐标）
+BOND = 1 2 PAIR              # 全部镜像合计
+AUTO_BONDS = 1.5 3.0         # 自动搜索 1.5–3.0 Å 内所有键；可加元素: AUTO_BONDS = 1.5 3.0 W O
+OUTPUT_PREFIX = results/CP2K
+LOBSTER_FILES = T
