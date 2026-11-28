@@ -1,0 +1,12 @@
+# CP2K BondDOS config for the MnO_uks example:  python main.py cohp cohp_MnO_uks.in
+MOKP = cohp_mo-1_0.mokp
+KS_DIR = .
+COHP_BASIS = AO
+COHP_GAUGE = ECOV            # default
+ORBITAL_RESOLUTION = L
+EMIN_EV = -15
+EMAX_EV = 10
+EF_EV = auto
+BOND = 1 2 ALL ORB           # all equivalent nearest Mn-O bonds, orbital resolved
+AUTO_BONDS = 1.5 2.5
+OUTPUT_PREFIX = results_MnO_uks/CP2K

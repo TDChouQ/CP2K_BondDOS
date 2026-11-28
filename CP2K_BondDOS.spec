@@ -6,6 +6,9 @@ datas = [
     ("assets/app_icon.ico", "assets"),
     ("assets/app_icon.png", "assets"),
     ("docs/方法说明.md", "docs"),
+    ("docs/CP2K输入设置.md", "docs"),
+    ("docs/使用教程.md", "docs"),
+    ("examples/cp2k_input", "examples/cp2k_input"),
     ("examples/WO3_gamma_pdos", "examples/WO3_gamma_pdos"),
 ]
 

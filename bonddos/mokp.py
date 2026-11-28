@@ -82,8 +82,26 @@ class MOKPData:
         return 2.0 if self.nspins == 1 else 1.0
 
 
+# Fortran ES/E edit descriptors drop the exponent letter when the exponent needs three digits
+# (e.g. Fermi-smeared occupations such as ``2.91755220991368-102``).
+_BARE_EXP = re.compile(r"(?<=[0-9.])([+-]\d{2,4})(?![0-9.])")
+
+
+def _to_floats(text):
+    """Whitespace separated Fortran reals -> 1-D float array (handles D exponents and ``1.0-102``)."""
+    toks = text.split()
+    try:
+        return np.array(toks, dtype=float)
+    except ValueError:
+        text = text.replace("D", "E").replace("d", "e")
+        try:
+            return np.array(text.split(), dtype=float)
+        except ValueError:
+            return np.array(_BARE_EXP.sub(r"E\1", text).split(), dtype=float)
+
+
 def _floats(lines):
-    return np.array(" ".join(lines).replace("D", "E").split(), dtype=float)
+    return _to_floats(" ".join(lines))
 
 
 def _sparse(lines, ncol_expected=3):
@@ -92,15 +110,14 @@ def _sparse(lines, ncol_expected=3):
         return np.zeros((0, 3))
     toks = " ".join(lines).split()
     if len(toks) == 3 * len(lines):
-        arr = np.array(toks, dtype=float).reshape(-1, 3)
-        return arr
+        return _to_floats(" ".join(toks)).reshape(-1, 3)
     out = np.empty((len(lines), 3))
     for i, ln in enumerate(lines):
         p = ln.split()
         if len(p) == 3:
-            out[i] = [float(p[0]), float(p[1]), float(p[2])]
+            out[i] = [float(p[0]), float(p[1]), _to_floats(p[2])[0]]
         else:  # fixed width fallback
-            out[i] = [float(ln[0:6]), float(ln[6:12]), float(ln[12:])]
+            out[i] = [float(ln[0:6]), float(ln[6:12]), _to_floats(ln[12:])[0]]
     return out
 
 
@@ -309,10 +326,13 @@ def read_mokp(path, progress=None, keep_coefficients=True) -> MOKPData:
     else:
         for atm in at:
             ao_atom[atm.first_ao - 1:atm.last_ao] = atm.index
+    wts = kp[:, 3].copy()
+    if wts.size and abs(wts.sum() - 1.0) < 1e-6:
+        wts /= wts.sum()                 # weights are printed with 9 digits only
     data = MOKPData(path=str(path), natom=header["natom"], nspins=header["nspins"], nao=nao, nkp=header["nkp"],
                     nmo=header.get("nmo", 0), use_real_wfn=header.get("use_real", False),
                     ao_export=header.get("ao_export", "?"), cell=cell, atoms=at, kpoints=kp[:, :3],
-                    weights=kp[:, 3], ao_atom=ao_atom, ao_shell=ao_shell, ao_l=ao_l, ao_m=ao_m,
+                    weights=wts, ao_atom=ao_atom, ao_shell=ao_shell, ao_l=ao_l, ao_m=ao_m,
                     sparse_threshold=header.get("thresh", 0.0))
     for (k, s), (e, o, c) in blocks.items():
         data.eig[(k, s)] = e
@@ -352,6 +372,23 @@ def find_ks_sets(folder):
     return sets
 
 
+def diagnose_ks_folder(folder):
+    """Hints for a folder in which no usable ``*KS_SPIN_<s>_K_<k>*.csr`` file was found."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return [f"KS 文件夹不存在: {folder}"]
+    names = [p.name for p in folder.iterdir() if p.is_file()]
+    csr = [n for n in names if n.lower().endswith(".csr")]
+    if any(re.search(r"KS_SPIN_\d+-", n, re.I) for n in csr):
+        return ["找到的是没有 k 点标记的 KS 文件（…KS_SPIN_1-1_0.csr）：CP2K 输入里没有 &KPOINTS。"
+                "只算 Γ 点也必须写 &KPOINTS / SCHEME GAMMA，否则不会输出 .mokp 和逐 k 点的 KS 矩阵"]
+    if any(re.search(r"KS_SPIN_\d+_R_", n, re.I) for n in csr):
+        return ["找到的是实空间 KS 矩阵（KS_CSR_WRITE 的 REAL_SPACE T）：请改为 REAL_SPACE F 输出 H(k)"]
+    if csr:
+        return ["文件夹里的 .csr 文件名不含 KS_SPIN_<s>_K_<k>，无法识别为 KS_CSR_WRITE 的 k 空间输出"]
+    return ["KS 文件夹里没有 .csr 文件：请在 CP2K 输入的 &DFT/&PRINT 中加入 &KS_CSR_WRITE ON 段"]
+
+
 def read_csr(path, nao, triangle="FULL") -> np.ndarray:
     """Read a DBCSR text CSR dump into a dense (nao, nao) complex matrix (Hartree)."""
     path = Path(path)
@@ -363,7 +400,7 @@ def read_csr(path, nao, triangle="FULL") -> np.ndarray:
     ncol = len(lines[0].split())
     if ncol not in (3, 4):
         raise MOKPError(f"{path.name}: 每行应为 3 或 4 列（行 列 实部 [虚部]），实际 {ncol} 列；不支持 BINARY T")
-    arr = np.array(" ".join(lines).replace("D", "E").split(), dtype=float)
+    arr = _to_floats(" ".join(lines))
     if arr.size % ncol:
         raise MOKPError(f"{path.name}: 列数不一致，文件可能被截断")
     arr = arr.reshape(-1, ncol)
@@ -374,7 +411,11 @@ def read_csr(path, nao, triangle="FULL") -> np.ndarray:
     m = np.zeros((nao, nao), dtype=complex)
     vals = arr[:, 2] + (1j * arr[:, 3] if ncol == 4 else 0.0)
     m[r, c] = vals
-    if triangle.upper() == "UPPER":
+    upper = triangle.upper() == "UPPER"
+    if not upper and nao > 1:
+        # UPPER_TRIANGULAR T that was not declared: strictly lower triangle empty, upper triangle not
+        upper = (not np.any(np.tril(m, -1))) and bool(np.any(np.triu(m, 1)))
+    if upper:
         low = np.tril_indices(nao, -1)
         m[low] = np.conj(m.T[low])
     return m

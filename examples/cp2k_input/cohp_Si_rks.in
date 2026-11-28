@@ -1,0 +1,12 @@
+# CP2K BondDOS config for the Si_rks example:  python main.py cohp cohp_Si_rks.in
+MOKP = cohp_mo-1_0.mokp
+KS_DIR = .
+COHP_BASIS = AO
+COHP_GAUGE = ECOV            # default
+ORBITAL_RESOLUTION = L
+EMIN_EV = -15
+EMAX_EV = 10
+EF_EV = auto
+BOND = 1 2 ALL ORB           # all equivalent nearest Si-Si bonds, orbital resolved
+AUTO_BONDS = 1.5 2.6
+OUTPUT_PREFIX = results_Si_rks/CP2K

@@ -16,6 +16,14 @@ wrapped frame used by CP2K's neighbour lists).  For a bond A(0)–B(R):
     COBI-L    Q      Q     P^σ_L = Q diag(f/g) Q†            (Wiberg type, LOBSTER-like)
     COBI-AO   S C    C     (P^σ S) = C diag(f/g) (SC)†      (Mayer type)
 
+Gauge of the AO-basis COHP (``cohp_gauge``): in a non-orthogonal basis C†HC changes by Δ·COOP under a
+uniform shift H → H + ΔS of the (arbitrary) potential zero of a periodic calculation.
+    ecov   H_μν − ½(ε_μ + ε_ν) S_μν,  ε_μ = H_μμ(R=0)   (DEFAULT; covalent bond energy, shift invariant;
+           Börnsen, Meyer, Grotheer, Fähnle, J. Phys.: Condens. Matter 11, L287 (1999))
+    eref   H_μν − E_ref S_μν                      (energies measured from the chosen energy zero)
+    raw    H_μν                                   (v1.0.0 behaviour; depends on the potential zero)
+The Löwdin COHP is shift invariant by construction and ignores this setting.
+
 Spectrum:  X(E) = Σ g w_k v_nk δ(E − ε_nk);   integral  IX = Σ w_k f_nk v_nk  (f = CP2K occupation).
 """
 from __future__ import annotations
@@ -98,6 +106,8 @@ class BondingOptions:
     quantities: tuple = ("cohp", "coop", "cobi")
     resolution: str = "none"               # none|l|lm|shell|ao  (applied to bonds marked resolve=True)
     spins: str = "auto"                    # auto|up|down|both
+    cohp_gauge: str = "ecov"               # ecov|eref|raw  (AO basis only)
+    cohp_shift: float = 0.0                # eV, reference energy used by cohp_gauge = "eref"
 
 
 class BondingEngine:
@@ -125,6 +135,22 @@ class BondingEngine:
         else:
             self.spins = [0, 1]
         self.log = []
+        self.gauge = (options.cohp_gauge or "ecov").lower()
+        self.gauge_fallback = False
+        if self.gauge not in ("raw", "ecov", "eref"):
+            raise ValueError(f"未知的 COHP_GAUGE: {options.cohp_gauge!r}（可选 RAW | ECOV | EREF）")
+        if options.basis == "lowdin" or "cohp" not in qs:
+            self.gauge = "raw"
+        elif self.gauge != "raw" and not system.has_S:
+            self.gauge, self.gauge_fallback = "raw", True      # no S(k): only the raw gauge is possible
+        self._onsite_cache = {}
+
+    def onsite_energies(self, s):
+        """ε_μ = H_μμ(R=0) = Σ_k w_k H_μμ(k) in eV for spin s (used by the E_cov gauge)."""
+        if s not in self._onsite_cache:
+            sysm = self.sys
+            self._onsite_cache[s] = sum(sysm.wts[k] * np.real(np.diag(sysm.H_ev(k, s))) for k in range(sysm.nk))
+        return self._onsite_cache[s]
 
     # ---- bond construction
     def make_bond(self, a, b, r_raw=None, mode="IMAGE", all_images=False):
@@ -168,6 +194,11 @@ class BondingEngine:
             if self.opt.basis == "lowdin":
                 out["cohp"] = (Q, Q, sih @ H @ sih)
             else:
+                if self.gauge == "ecov":
+                    e = self.onsite_energies(s)
+                    H = H - 0.5 * (e[:, None] * S + S * e[None, :])
+                elif self.gauge == "eref":
+                    H = H - self.opt.cohp_shift * S
                 out["cohp"] = (C, C, H)
         if "coop" in qs:
             out["coop"] = (C, C, S)
@@ -208,6 +239,8 @@ class BondingEngine:
                 if not sysm.mesh.full and sysm.nk > 1:
                     st, notes = "aliased", ["k 点网格不是完整等权网格，无法做周期镜像分解"]
                 r.status, r.notes = st, notes
+            elif not sysm.mesh.full and sysm.nk > 1:
+                r.notes = ["k 网格经过点群对称性约化：PAIR 结果只有对对称等价的键取平均后才有意义（请用 SYMMETRY F）"]
             if i in resolve:
                 r.channels_a = atom_channels(sysm, b.a, self.opt.resolution)
                 r.channels_b = atom_channels(sysm, b.b, self.opt.resolution)

@@ -72,6 +72,7 @@ class SessionSettings:
     de: float = 0.01
     eref_mode: str = "auto"         # auto|hoco|midgap|fermi|manual
     eref_value: float | None = None
+    cohp_gauge: str = "ecov"        # ecov|eref|raw, see bonding.py (AO basis only)
 
 
 class BondSession:
@@ -132,7 +133,8 @@ class BondSession:
         """auto: dict(dmin, dmax, elements_a, elements_b, atoms) for neighbour search."""
         st = self.system.structure
         eng = BondingEngine(self.system, BondingOptions(self.settings.basis, self.settings.quantities,
-                                                         self.settings.resolution, self.settings.spins))
+                                                         self.settings.resolution, self.settings.spins,
+                                                         self.settings.cohp_gauge, self.eref))
         bonds, resolve = [], set()
         seen = set()
         for rq in requests:
@@ -164,6 +166,15 @@ class BondSession:
         if len(bonds) > 3000:
             raise ValueError(f"键数量过多 ({len(bonds)})，请缩小距离范围或限定元素")
         self.engine = eng
+        self.notes = [n for n in self.notes if not n.startswith("AO 表象的原始 COHP")]
+        if self.settings.basis == "ao" and "cohp" in eng.quantities and eng.gauge == "raw":
+            why = ("没有 S(k)（MO_KP 未用 AO_EXPORT_TYPE OVERLAP_MATRIX），COHP 规范只能退回 RAW。"
+                   if eng.gauge_fallback else "")
+            self.notes.append(
+                "AO 表象的原始 COHP（COHP_GAUGE = RAW）：" + why +
+                "它依赖周期体系的势能零点（H→H+ΔS 时 ICOHP 改变 Δ·ICOOP），"
+                f"当前能量零点为 {self.eref:.2f} eV；异核键的 ICOHP 符号和大小可能没有化学意义。"
+                "推荐用默认的 COHP_GAUGE = ECOV（共价键能，平移不变）")
         self.results = eng.run(bonds, resolve, progress=progress, cancel=cancel)
         return self.results
 
@@ -471,6 +482,7 @@ def session_from_config(cfg, progress=None):
     s.quantities = tuple(qs)
     s.resolution = cfg.get("ORBITAL_RESOLUTION", "L").lower()
     s.spins = cfg.get("SPIN", "AUTO").lower()
+    s.cohp_gauge = cfg.get("COHP_GAUGE", "ECOV").lower()
     if "FWHM_EV" in cfg:
         s.fwhm = float(cfg["FWHM_EV"])
     elif "SIGMA_EV" in cfg:
@@ -510,7 +522,7 @@ def write_config(path, sess: BondSession, bonds_text: list[str], auto=None, pref
     if inp.get("ks_set"):
         lines.append(f"KS_PATTERN = {inp['ks_set']}")
     lines += [f"PERIODIC = {inp.get('periodic', 'XYZ')}", f"CSR_TRIANGLE = {inp.get('triangle', 'FULL')}",
-              f"COHP_BASIS = {s.basis.upper()}", f"COOP = {'T' if 'coop' in s.quantities else 'F'}",
+              f"COHP_BASIS = {s.basis.upper()}", f"COHP_GAUGE = {s.cohp_gauge.upper()}", f"COOP = {'T' if 'coop' in s.quantities else 'F'}",
               f"COBI = {'T' if 'cobi' in s.quantities else 'F'}", f"ORBITAL_RESOLUTION = {s.resolution.upper()}",
               f"SPIN = {s.spins.upper()}", f"FWHM_EV = {s.fwhm:g}", f"EMIN_EV = {s.emin:g}", f"EMAX_EV = {s.emax:g}",
               f"DE_EV = {s.de:g}",

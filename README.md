@@ -8,11 +8,34 @@ CP2K BondDOS 是面向 CP2K 2026.2+ 的电子结构后处理软件（Windows 图
 | COBI / ICOBI 键级 | Löwdin 表象为 Wiberg 型（与 LOBSTER 定义一致），AO 表象为 Mayer 型 |
 | 电荷与布居 | Mulliken / Löwdin 原子电荷、UKS 磁矩、逐轨道布居（GROSSPOP） |
 | 原子分辨 k 点 PDOS | 由 MO_KP 直接投影到任意原子/原子组及 s/p/d/f、px/dxy…，**无需拆分 KIND** |
-| LOBSTER 格式导出 | COHPCAR / ICOHPLIST / COOPCAR / ICOOPLIST / COBICAR / ICOBILIST / CHARGE / GROSSPOP / DOSCAR.lobster + POSCAR，可直接给 pymatgen、LobsterPy |
+| LOBSTER 格式导出（pymatgen、LobsterPy 实测可读） | COHPCAR / ICOHPLIST / COOPCAR / ICOOPLIST / COBICAR / ICOBILIST / CHARGE / GROSSPOP / DOSCAR.lobster + POSCAR，可直接给 pymatgen、LobsterPy |
 | 能带描述符 | 中心、宽度、偏度、峰度、填充率、费米能以下中心、上边缘（Hilbert 变换） |
 | 自动识别 k 网格 | 无需手填网格尺寸；支持偏移 MP 网格 |
 | 相位/混叠自检 | 重叠衰减判据检查周期镜像相位约定、±0.5 边界原子的回卷方向；给出 k 网格混叠指标 |
 | 出版级作图 | 能量横排/竖排（LOBSTER 风格）、−COHP、积分曲线单独面板、β 镜像、填充、字号线宽、按英寸和 DPI 导出 PNG/PDF/SVG/TIFF |
+
+**第一次用请看 `docs/使用教程.md`**：从 CP2K 输入到 COHP 曲线、d 带中心、电荷的完整流程，附可直接运行的例子。
+
+| 平台 | 形态 |
+|---|---|
+| Windows | 图形界面 `CP2K_BondDOS.exe`（双击 `build_windows.bat` 生成） |
+| Linux / macOS / 服务器 | 无界面命令行：`pip install git+https://github.com/TDChouQ/CP2K_BondDOS` 后用 `cp2k-bonddos`；或 `bash build_linux.sh` 生成单文件程序 |
+
+## 〇、CP2K 输入里要加什么
+
+在结构优化后的单点能输入（`RUN_TYPE ENERGY`）的 `&DFT` 里改三处，详见 **`docs/CP2K输入设置.md`**（软件内“CP2K 输入设置”页；逐项用 CP2K 2026.2 实测）：
+
+| 位置 | 加什么 | 不加的后果 |
+|---|---|---|
+| `&DFT/&KPOINTS` | `SCHEME MONKHORST-PACK n n n`（只算 Γ 点写 `SCHEME GAMMA`）；偶数网格加 `GAMMA_CENTERED T` | 没有 `&KPOINTS` 就不输出 `.mokp` |
+| `&DFT/&SCF` | 对角化（不能用 OT）+ `ADDED_MOS N` | 空轨道不够，费米能以上的反键区画不出来 |
+| `&DFT/&PRINT` | `&MO_KP ON` 且 `AO_EXPORT_TYPE OVERLAP_MATRIX`；`&KS_CSR_WRITE ON` | 没有 S(k) / H(k)，COOP、COBI、电荷或 COHP 算不了 |
+
+```bash
+python main.py template --uks --smear --mesh 3 3 3   # 打印可直接粘贴的输入段
+```
+
+`examples/cp2k_input/` 里有两个可直接运行的完整例子（Si，铁磁 MnO）和 `bonddos_print.inc`（在 `&PRINT` 里 `@INCLUDE` 即可）。
 
 ## 一、生成 exe（只需做一次）
 
@@ -61,20 +84,22 @@ CP2K BondDOS 是面向 CP2K 2026.2+ 的电子结构后处理软件（Windows 图
 
 ```bash
 python main.py cohp cohp.in --check      # 只检查
-python main.py cohp cohp.in              # 计算并导出（配置示例见 cohp.in.example）
+python main.py cohp cohp.in --plot       # 计算并导出（配置示例见 cohp.in.example），同时出图
+python main.py pdos cohp_mo-1_0.mokp --group "Mn: Mn" --group "O: 2,5-7" --stats bc.csv --charges q.csv --plot pdos.png
 python main.py dos *.pdos --channels total,d --emin -10 --emax 5 --stats bc.csv --plot pdos.png
 python main.py merge_pdos *.pdos         # -> merged_pdos.dat
 python main.py band_center *.pdos        # -> band_center.dat
 python main.py demo demo_folder          # 合成测试数据
+python main.py template --uks --smear    # CP2K 输入中需要加入的内容
 ```
 
-Linux 上需要 `pip install numpy matplotlib`（命令行不需要 PySide6）。
+Linux 上 `pip install -r requirements-cli.txt`（只有 numpy、matplotlib，不需要 PySide6）；pip 安装后命令名为 `cp2k-bonddos`。
 
 ## 四、正确性
 
-* 自带 16 项自动测试（`python -m pytest tests -q`），其中 k 点 COHP/COOP/COBI 与独立的 Γ 点超胞实空间计算一致到 10⁻⁸，覆盖 AO/Löwdin、RKS/UKS、偏移网格、坐标平移不变性、轨道分解求和、LOBSTER 文件格式。
+* 自带 34 项自动测试（`python -m pytest tests -q`），其中 k 点 COHP/COOP/COBI 与独立的 Γ 点超胞实空间计算一致到 10⁻⁸，覆盖 AO/Löwdin、RKS/UKS、偏移网格、坐标平移不变性、轨道分解求和、LOBSTER 文件格式。
 * CP2K 文件格式按 v2026.2 源码（`kpoint_mo_dump.F`、`qs_scf_csr_write.F`、DBCSR `csr_write`、`qs_dos.F`、`qs_pdos.F`）核对；Fourier 相位与回卷约定按 `kpoint_methods.F`、`qs_neighbor_lists.F` 核对。
-* **尚未用真实 CP2K 2026.2 的 `.mokp/.csr` 做过端到端测试**（手头没有样例）。第一次用真实数据时请留意“数据一致性检查”与“相位约定检查”是否全部为 ✔；若有 ✘，把 `*_report.json` 和检查截图发给开发者。
+* **已用真实 CP2K 2026.2 输出做端到端验证（v1.1.0）**：Si（RKS）、石墨烯（Fermi 展宽、二维 3×3×1）、铁磁 MnO（UKS、固定磁矩展宽、原子在晶胞外、O 恰在 0.5 边界）三个体系中，原胞 k 点 IMAGE 结果与等价 Γ 点超胞的 PAIR 结果一致到 10⁻⁷–10⁻⁸；Mulliken 电荷/磁矩、费米能与 CP2K 主输出一致。其中两个小算例（SZV 基组）作为回归样例放在 `tests/fixtures/real_cp2k_2026.2/`。
 
 方法细节见软件内“方法说明”页或 `docs/方法说明.md`；CP2K 输入设置与完整计算流程见 `docs/DOS和COHP计算流程.md`。
 
@@ -84,13 +109,14 @@ Linux 上需要 `pip install numpy matplotlib`（命令行不需要 PySide6）�
 CP2K_BondDOS/
 ├─ build_windows.bat        一键打包
 ├─ run_from_source.bat      不打包直接运行
-├─ 同步更新到GitHub.bat     把本地改动上传到 GitHub
+├─ build_linux.sh           Linux 无界面单文件程序
+├─ pyproject.toml           pip 安装（命令 cp2k-bonddos）
 ├─ main.py                  入口（无参数=图形界面）
 ├─ CHANGELOG.md             更新记录
 ├─ CP2K_BondDOS.spec        PyInstaller 配置
 ├─ bonddos/                 源码（mokp/kspace/bonding/population/dosfiles/dosanalysis/lobster/plotting/gui）
 ├─ assets/                  图标 app_icon.svg/png/ico
-├─ docs/                    方法说明、计算流程
-├─ examples/                WO₃ Γ 点 PDOS 示例
+├─ docs/                    使用教程、CP2K输入设置、方法说明、计算流程
+├─ examples/                WO₃ Γ 点 PDOS 示例；cp2k_input/ 为 CP2K 输入模板与完整例子
 └─ tests/                   自动测试与 2026.2 格式样例
 ```

@@ -86,7 +86,8 @@ def write_grosspop(path, system, pop_m, pop_l):
     """GROSSPOP-like table: per orbital Mulliken and Löwdin gross populations."""
     lines = [f"# GROSSPOP {NOTE}",
              ("#    Atom  Orbital   Mulliken GP(up)  Mulliken GP(down)  Loewdin GP(up)  Loewdin GP(down)" if system.ns == 2
-              else "#    Atom  Orbital   Mulliken GP   Loewdin GP")]
+              else "#    Atom  Orbital   Mulliken GP   Loewdin GP"),
+             "# " + "-" * 70]          # LOBSTER files have three header lines (pymatgen skips exactly three)
     for atom in range(1, len(system.d.atoms) + 1):
         el = system.d.atoms[atom - 1].element
         first = True
@@ -109,8 +110,13 @@ def write_doscar(path, system, grid, tdos, pdos_cols, spins):
     nat = len(system.d.atoms)
     de = grid[1] - grid[0] if grid.size > 1 else 1.0
     head = f"{grid[-1]:15.8f}{grid[0]:15.8f}{grid.size:6d}{0.0:15.8f}{1.0:15.8f}"
+    # pymatgen's Doscar reader takes E_Fermi from whitespace token 17 of this title line (energies are
+    # written relative to the chosen zero, so the value is 0)
+    title = ("DOSCAR.lobster written by CP2K-BondDOS from CP2K Gaussian-AO data (not a LOBSTER projection); "
+             "energies relative to E_ref, E_F=")
+    assert len(title.split()) == 17
     lines = [f"{nat:4d}{nat:4d}{1:4d}{0:4d}", "  0.0000000E+00  0.0000000E+00  0.0000000E+00  0.0000000E+00  0.1000000E-15",
-             "  1.0000000000000000E-004", "  CAR ", f" DOSCAR.lobster {NOTE}", head]
+             "  1.0000000000000000E-004", "  CAR ", f" {title} {0.0:.8f}", head]
     integ = {s: np.cumsum(tdos[s]) * de for s in spins}
     for i in range(grid.size):
         vals = [grid[i]] + [tdos[s][i] for s in spins] + [integ[s][i] for s in spins]

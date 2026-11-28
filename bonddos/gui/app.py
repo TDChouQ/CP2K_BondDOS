@@ -69,13 +69,21 @@ class MainWindow(QMainWindow):
         else:
             self.methods.setPlainText("缺少 docs/方法说明.md")
 
+        self.cp2k_doc = QTextBrowser()
+        self.cp2k_doc.setOpenExternalLinks(True)
+        doc = Path(resource_path("docs/CP2K输入设置.md"))
+        if doc.exists():
+            self.cp2k_doc.setMarkdown(doc.read_text(encoding="utf-8"))
+        else:
+            self.cp2k_doc.setPlainText("缺少 docs/CP2K输入设置.md")
+
         self.stack = QStackedWidget()
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         self.nav.setFixedWidth(190)
         self.nav.setIconSize(QSize(20, 20))
         pages = [("态密度 DOS / PDOS", self.dos), ("k 点成键 COHP", self.cohp), ("电荷与原子 PDOS", self.pop),
-                 ("方法说明", self.methods), ("运行日志", self.log_view)]
+                 ("CP2K 输入设置", self.cp2k_doc), ("方法说明", self.methods), ("运行日志", self.log_view)]
         for name, w in pages:
             QListWidgetItem(name, self.nav)
             self.stack.addWidget(w)

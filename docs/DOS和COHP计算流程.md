@@ -177,6 +177,8 @@ s                    // 保存设置；以后输入 1 载入
 
 ### CP2K 输入文件设置
 
+> 逐项核对过的最新版说明（每个关键字是否必须、不写的后果、可直接运行的例子）见 `docs/CP2K输入设置.md`；`python main.py template --uks --smear` 可直接打印需要加入的输入段。下面是简述。
+
 **增加未占据轨道**（需要分析费米能以上反键态时）：
 
 ```text
@@ -286,6 +288,7 @@ MOKP = cohp_mo-1_0.mokp
 KS_DIR = .
 PERIODIC = XYZ
 COHP_BASIS = AO          # AO 或 LOWDIN
+COHP_GAUGE = ECOV        # 默认；ECOV | EREF | RAW，见方法说明 2.6
 COOP = T
 COBI = T
 ORBITAL_RESOLUTION = L   # NONE | L | LM | SHELL | AO

@@ -219,6 +219,8 @@ def read_dos_file(path, block: int | str = "last") -> list[DosData]:
     joined = "\n".join(hdr)
     fermi_v = _ref_values(hdr, "Fermi")
     hoco_v = _ref_values(hdr, "HOCO")
+    if fermi_v and all(v == 0.0 for v in fermi_v) and any(v != 0.0 for v in hoco_v):
+        fermi_v = []      # CP2K prints E(Fermi) = 0 in the total-DOS files when ENERGY_ZERO is ABSOLUTE
     spin_m = re.search(r"(?:^|[-_.])(ALPHA|BETA)(?:[-_.]|$)", path.name, re.I)
     spin = spin_m.group(1).lower() if spin_m else "none"
     zero_line = [h for h in hdr if re.match(r"Energy zero\s*:", h, re.I)]

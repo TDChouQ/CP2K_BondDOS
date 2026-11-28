@@ -8,6 +8,10 @@ import numpy as np
 
 from .constants import FWHM_PER_SIGMA
 
+# NumPy 2.0 renamed trapz -> trapezoid (trapz was removed in 2.4); support both.
+_trapz = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+trapz = _trapz
+
 
 def _erf_np(x):
     """erf with |error| < 1.2e-7 (Numerical Recipes erfc Chebyshev fit); NumPy only."""
@@ -181,23 +185,23 @@ def curve_descriptors(x, y, emin=None, emax=None, zero=0.0) -> BandDescriptors:
     """Moments of a (non-negative) DOS curve inside [emin, emax]; energies relative to `zero`."""
     xs, ys = _window(np.asarray(x) - zero, y, None if emin is None else emin - 0.0, None if emax is None else emax)
     out = BandDescriptors()
-    m0 = np.trapezoid(ys, xs)
+    m0 = _trapz(ys, xs)
     out.integral = float(m0)
     if abs(m0) > 1e-14:
-        c = np.trapezoid(xs * ys, xs) / m0
+        c = _trapz(xs * ys, xs) / m0
         out.center = float(c)
-        mu2 = np.trapezoid((xs - c) ** 2 * ys, xs) / m0
+        mu2 = _trapz((xs - c) ** 2 * ys, xs) / m0
         if mu2 > 0:
             out.width = float(math.sqrt(mu2))
-            out.skewness = float(np.trapezoid((xs - c) ** 3 * ys, xs) / m0 / mu2 ** 1.5)
-            out.kurtosis = float(np.trapezoid((xs - c) ** 4 * ys, xs) / m0 / mu2 ** 2)
+            out.skewness = float(_trapz((xs - c) ** 3 * ys, xs) / m0 / mu2 ** 1.5)
+            out.kurtosis = float(_trapz((xs - c) ** 4 * ys, xs) / m0 / mu2 ** 2)
     xo, yo = _window(xs, ys, None, 0.0)
-    mo = np.trapezoid(yo, xo) if xo[-1] > xo[0] else 0.0
+    mo = _trapz(yo, xo) if xo[-1] > xo[0] else 0.0
     out.occ_integral = float(mo)
     if abs(m0) > 1e-14:
         out.filling = float(mo / m0)
     if abs(mo) > 1e-14:
-        out.occ_center = float(np.trapezoid(xo * yo, xo) / mo)
+        out.occ_center = float(_trapz(xo * yo, xo) / mo)
     if xs.size > 8 and abs(m0) > 1e-14:
         n = max(512, xs.size)
         xu = np.linspace(xs[0], xs[-1], n)

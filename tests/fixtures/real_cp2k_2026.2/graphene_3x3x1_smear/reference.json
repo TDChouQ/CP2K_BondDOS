@@ -1,0 +1,376 @@
+{
+ "source": "CP2K 2026.2 (conda-forge), PBE/GTH/SZV-MOLOPT-SR-GTH; reference = PAIR-mode integrals of the equivalent Gamma-point supercell; Mulliken data and Fermi energy from the CP2K output",
+ "supercell": [
+  3,
+  3,
+  1
+ ],
+ "tol": 2e-06,
+ "bonds": [
+  {
+   "a": 1,
+   "b": 1,
+   "R": [
+    0,
+    1,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690608912
+    },
+    "coop": {
+     "total": -0.077192432
+    },
+    "cobi": {
+     "total": -0.000758951
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.079838929
+    },
+    "cobi": {
+     "total": 0.000739067
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 1,
+   "R": [
+    1,
+    0,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690608912
+    },
+    "coop": {
+     "total": -0.077192432
+    },
+    "cobi": {
+     "total": -0.000758951
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.079838929
+    },
+    "cobi": {
+     "total": 0.000739067
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 1,
+   "R": [
+    1,
+    1,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690609805
+    },
+    "coop": {
+     "total": -0.077192471
+    },
+    "cobi": {
+     "total": -0.000758948
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.079838721
+    },
+    "cobi": {
+     "total": 0.000739064
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    -1,
+    -1,
+    0
+   ],
+   "status": "gamma",
+   "length": 1.420281,
+   "ao": {
+    "cohp": {
+     "total": -17.591428822
+    },
+    "coop": {
+     "total": 0.963243076
+    },
+    "cobi": {
+     "total": 1.230880232
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -32.553102435
+    },
+    "cobi": {
+     "total": 1.222582558
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    -1,
+    0,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.840563,
+   "ao": {
+    "cohp": {
+     "total": 0.627871487
+    },
+    "coop": {
+     "total": -0.028031131
+    },
+    "cobi": {
+     "total": 0.00798465
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": 0.098304948
+    },
+    "cobi": {
+     "total": 0.007011188
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    0,
+    -1,
+    0
+   ],
+   "status": "gamma",
+   "length": 1.420281,
+   "ao": {
+    "cohp": {
+     "total": -17.591429211
+    },
+    "coop": {
+     "total": 0.963243088
+    },
+    "cobi": {
+     "total": 1.230880265
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -32.553098936
+    },
+    "cobi": {
+     "total": 1.222582577
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    0,
+    0,
+    0
+   ],
+   "status": "gamma",
+   "length": 1.420282,
+   "ao": {
+    "cohp": {
+     "total": -17.591428822
+    },
+    "coop": {
+     "total": 0.963243076
+    },
+    "cobi": {
+     "total": 1.230880232
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -32.553102436
+    },
+    "cobi": {
+     "total": 1.222582558
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    1,
+    -1,
+    0
+   ],
+   "status": "gamma",
+   "length": 3.757712,
+   "ao": {
+    "cohp": {
+     "total": -0.334686539
+    },
+    "coop": {
+     "total": 0.013197627
+    },
+    "cobi": {
+     "total": 0.021349738
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.109025633
+    },
+    "cobi": {
+     "total": 0.026407111
+    }
+   }
+  },
+  {
+   "a": 1,
+   "b": 2,
+   "R": [
+    1,
+    0,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.840563,
+   "ao": {
+    "cohp": {
+     "total": 0.627871175
+    },
+    "coop": {
+     "total": -0.028031118
+    },
+    "cobi": {
+     "total": 0.00798465
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": 0.098304922
+    },
+    "cobi": {
+     "total": 0.007011188
+    }
+   }
+  },
+  {
+   "a": 2,
+   "b": 2,
+   "R": [
+    0,
+    1,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690608909
+    },
+    "coop": {
+     "total": -0.077192432
+    },
+    "cobi": {
+     "total": -0.000758951
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.07983893
+    },
+    "cobi": {
+     "total": 0.000739067
+    }
+   }
+  },
+  {
+   "a": 2,
+   "b": 2,
+   "R": [
+    1,
+    0,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690608909
+    },
+    "coop": {
+     "total": -0.077192432
+    },
+    "cobi": {
+     "total": -0.000758951
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.07983893
+    },
+    "cobi": {
+     "total": 0.000739067
+    }
+   }
+  },
+  {
+   "a": 2,
+   "b": 2,
+   "R": [
+    1,
+    1,
+    0
+   ],
+   "status": "gamma",
+   "length": 2.46,
+   "ao": {
+    "cohp": {
+     "total": 1.690609791
+    },
+    "coop": {
+     "total": -0.07719247
+    },
+    "cobi": {
+     "total": -0.000758948
+    }
+   },
+   "lowdin": {
+    "cohp": {
+     "total": -0.079838724
+    },
+    "cobi": {
+     "total": 0.000739064
+    }
+   }
+  }
+ ],
+ "mulliken_charges_cp2k": [
+  -0.0,
+  -0.0
+ ],
+ "eref_eV": -0.58877
+}

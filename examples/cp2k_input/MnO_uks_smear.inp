@@ -1,0 +1,87 @@
+! CP2K BondDOS example input (ferromagnetic MnO, UKS + Fermi smearing), tested with CP2K 2026.2.
+! Lines marked  <== BondDOS  are what BondDOS needs in addition to a normal single-point calculation.
+! Run:   mpirun -np 4 cp2k.psmp -i MnO_uks_smear.inp -o MnO_uks_smear.out      (bonddos_print.inc must be in the same folder)
+! Then:  python main.py cohp cohp_MnO_uks.in      or open cohp_mo-1_0.mokp in the GUI page "k 点成键 COHP"
+&GLOBAL
+  PROJECT MnO_uks
+  RUN_TYPE ENERGY                       ! single point on the final (relaxed) geometry
+  PRINT_LEVEL MEDIUM
+&END GLOBAL
+&FORCE_EVAL
+  METHOD QS
+  &DFT
+    BASIS_SET_FILE_NAME BASIS_MOLOPT
+    POTENTIAL_FILE_NAME GTH_POTENTIALS
+    UKS T
+    MULTIPLICITY 6
+    &QS
+      EPS_DEFAULT 1.0E-12
+    &END QS
+    &MGRID
+      CUTOFF 400
+      REL_CUTOFF 50
+    &END MGRID
+    &XC
+      &XC_FUNCTIONAL PBE
+      &END XC_FUNCTIONAL
+    &END XC
+    &SCF
+      EPS_SCF 1.0E-7
+      MAX_SCF 200
+      ADDED_MOS 20                      ! <== BondDOS: empty bands to export (cover the antibonding region)
+      &DIAGONALIZATION                  ! <== BondDOS: diagonalisation, not OT (k-points)
+      &END DIAGONALIZATION
+      &MIXING
+        METHOD BROYDEN_MIXING
+        ALPHA 0.2
+        NBROYDEN 8
+      &END MIXING
+      &SMEAR ON
+        METHOD FERMI_DIRAC
+        ELECTRONIC_TEMPERATURE [K] 1000
+      &END SMEAR
+    &END SCF
+    &KPOINTS                            ! <== BondDOS: required, also for Gamma only (SCHEME GAMMA)
+      SCHEME MONKHORST-PACK 3 3 3
+      SYMMETRY F
+    &END KPOINTS
+    &PRINT
+      @INCLUDE 'bonddos_print.inc'      ! <== BondDOS: &MO_KP + &KS_CSR_WRITE
+      &DOS                              ! optional: CP2K's own DOS / PDOS per KIND (page 1 of BondDOS)
+        DELTA_E 0.0003674932
+        NLUMO 20
+        &CURVE
+          ENERGY_UNIT EV
+          ENERGY_ZERO FERMI
+          &BROADEN
+            TYPE GAUSSIAN
+            WIDTH [eV] 0.10
+          &END BROADEN
+        &END CURVE
+        &PDOS
+          COMPONENTS F
+        &END PDOS
+      &END DOS
+    &END PRINT
+  &END DFT
+  &SUBSYS
+    &CELL
+      A 0.0 2.22250 2.22250
+      B 2.22250 0.0 2.22250
+      C 2.22250 2.22250 0.0
+    &END CELL
+    &COORD
+      Mn 0.0 0.0 0.0
+      O  2.22250 2.22250 2.22250
+    &END COORD
+    &KIND Mn
+      BASIS_SET DZVP-MOLOPT-SR-GTH
+      POTENTIAL GTH-PBE-q15
+      MAGNETIZATION 5
+    &END KIND
+    &KIND O
+      BASIS_SET DZVP-MOLOPT-SR-GTH
+      POTENTIAL GTH-PBE-q6
+    &END KIND
+  &END SUBSYS
+&END FORCE_EVAL

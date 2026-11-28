@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class DosOptions:
     merge: bool = False           # sum selected datasets per spin & channel
     occupied: bool = False        # occupation-weighted (raw data only)
     rebroaden_curves: bool = False
+    scale: float = 1.0            # multiply all intensities (2 = both spins of a restricted calculation)
     integrate: bool = False       # IDOS instead of DOS
 
 
@@ -44,6 +46,27 @@ class DosProject:
     def __init__(self):
         self.data: list[DosData] = []
         self.errors: list[str] = []
+        self.notes: list[str] = []
+
+    def _harmonize_fermi(self):
+        """Fixed-moment UKS runs have two Fermi energies, but CP2K (checked with 2026.2) puts the zero of
+        *all* broadened curves at the higher one; use that common level for both spins."""
+        groups = {}
+        for d in self.data:
+            p = Path(d.path)
+            project = re.split(r"-(?:ALPHA_|BETA_)?(?:k\d+|list\d+|curve|\d+\.dos)", p.name)[0]
+            groups.setdefault((str(p.parent), project, d.iteration), []).append(d)
+        for lst in groups.values():
+            vals = [d.fermi for d in lst if d.fermi is not None]
+            if not vals:
+                continue
+            if max(vals) - min(vals) > 1e-4:
+                msg = (f"两个自旋通道的费米能（无展宽时为各自的 HOCO）不同（{min(vals):.3f} / {max(vals):.3f} eV）："
+                       "CP2K 的展宽曲线统一以较高者为零点，这里两个自旋也统一用它")
+                if msg not in self.notes:
+                    self.notes.append(msg)
+            for d in lst:
+                d.fermi = max(vals)      # also fills files whose header has no usable Fermi energy
 
     def add_files(self, paths):
         new = []
@@ -58,11 +81,13 @@ class DosProject:
                     continue
                 self.data.append(d)
                 new.append(d)
+        self._harmonize_fermi()
         return new
 
     def clear(self):
         self.data.clear()
         self.errors.clear()
+        self.notes.clear()
 
     def available_channels(self, items=None):
         items = self.data if items is None else items
@@ -87,7 +112,7 @@ class DosProject:
             for ch in opt.channels:
                 if ch not in d.channels:
                     continue
-                y = d.channels[ch]
+                y = d.channels[ch] * opt.scale
                 if d.mode == "sticks":
                     # one state per MO; occupation-weighted spectrum counts electrons (f <= 2 or 1)
                     w = y * d.occupation if opt.occupied else y
@@ -106,7 +131,7 @@ class DosProject:
                 else:
                     yy = y
                     if opt.occupied and "occupied" in d.channels and ch == "total":
-                        yy = d.channels["occupied"]
+                        yy = d.channels["occupied"] * opt.scale
                     if opt.rebroaden_curves and opt.fwhm > 0:
                         # extra Gaussian convolution of an already broadened curve
                         de = np.median(np.diff(e))

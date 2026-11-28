@@ -1,10 +1,12 @@
+# CP2K 输入里要加什么：见 docs/CP2K输入设置.md，或运行  python main.py template
 # CP2K BondDOS 配置示例：  CP2K_BondDOS.exe 不需要它；命令行用法  python main.py cohp cohp.in
 MOKP = cohp_mo-1_0.mokp
 KS_DIR = .
 # KS_PATTERN = cohp_ks-KS_SPIN_*_K_*-1_0.csr     # 文件夹里有多组 KS 文件时指定
 PERIODIC = XYZ
-CSR_TRIANGLE = FULL
+CSR_TRIANGLE = FULL          # 可省略：上三角存储（UPPER_TRIANGULAR T）会自动识别
 COHP_BASIS = AO              # AO = 直接 Gaussian AO；LOWDIN = 正交化（类 LOBSTER）
+COHP_GAUGE = ECOV            # ECOV（默认：共价键能，平移不变）| EREF | RAW（v1.0.0 的结果）；只对 AO 表象有效
 COOP = T
 COBI = T
 ORBITAL_RESOLUTION = L       # NONE | L | LM | SHELL | AO（对带 ORB 的键生效）

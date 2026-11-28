@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cp2k-bonddos"
+dynamic = ["version"]
+description = "DOS/PDOS and k-point COHP/COOP/COBI bonding analysis for CP2K 2026.2+ (GUI on Windows, command line everywhere)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+gui = ["PySide6-Essentials>=6.5"]
+dev = ["pytest", "scipy"]
+
+[project.urls]
+Homepage = "https://github.com/TDChouQ/CP2K_BondDOS"
+
+[project.scripts]
+cp2k-bonddos = "bonddos.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "bonddos.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["bonddos*"]

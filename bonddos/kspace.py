@@ -1,6 +1,7 @@
 """k-point system: mesh inference, CP2K gauge, structure helpers, per-k matrices and validation."""
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 import re
@@ -10,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from .constants import HARTREE_EV
-from .mokp import MOKPData, read_mokp, find_ks_sets, read_csr, MOKPError
+from .mokp import MOKPData, read_mokp, find_ks_sets, read_csr, MOKPError, diagnose_ks_folder
 
 
 # ------------------------------------------------------------------ mesh
@@ -59,7 +60,41 @@ def infer_mesh(kpoints: np.ndarray, weights: np.ndarray, tol=1e-5) -> MeshInfo:
         msgs.append("k 点权重不相等：网格经过了对称性约化，周期镜像（IMAGE）分析不可用")
     if abs(weights.sum() - 1.0) > 1e-6:
         msgs.append(f"k 点权重之和为 {weights.sum():.8f}（应为 1）")
+    if full and eq and any(abs(sh) > 1e-4 for sh, n in zip(shift, mesh) if n > 1):
+        msgs.append("k 网格不含 Γ 点（偶数 Monkhorst–Pack 网格）：在 fcc、六方等晶格中这种网格会破坏点群对称性，"
+                    "对称等价的键可能得到略有不同的结果；需要严格等价时请用奇数网格，或在 &KPOINTS 中加 GAMMA_CENTERED T")
     return MeshInfo(tuple(mesh), tuple(shift), full and eq, eq, msgs)
+
+
+def unfold_time_reversal(d: MOKPData, H: dict, tol=1e-6):
+    """Add the −k partner of every k-point that has none (CP2K default: FULL_GRID F, SYMMETRY F).
+
+    Without spin–orbit coupling H(−k) = H(k)*, S(−k) = S(k)*, C(−k) = C(k)* with identical eigenvalues and
+    occupations; the weight of a k/−k pair is shared equally.  Returns (data, H, number_of_added_points).
+    """
+    kp, w, n = d.kpoints, d.weights, d.nkp
+    s = kp[:, None, :] + kp[None, :, :]
+    has_partner = (np.abs(s - np.round(s)).max(axis=2) < tol).any(axis=1)     # includes k ≡ −k points
+    add = np.where(~has_partner)[0]
+    if add.size == 0:
+        return d, H, 0
+    w2 = w.copy()
+    w2[add] *= 0.5
+    new = dataclasses.replace(d, nkp=n + add.size, kpoints=np.vstack([kp, -kp[add]]),
+                              weights=np.concatenate([w2, w2[add]]), eig=dict(d.eig), occ=dict(d.occ),
+                              coeff=dict(d.coeff), overlap=dict(d.overlap), warnings=list(d.warnings))
+    H2 = dict(H)
+    for j, i in enumerate(add):
+        if i in d.overlap:
+            new.overlap[n + j] = d.overlap[i].conj()
+        for sp in range(d.nspins):
+            new.eig[(n + j, sp)] = d.eig[(i, sp)]
+            new.occ[(n + j, sp)] = d.occ[(i, sp)]
+            if (i, sp) in d.coeff:
+                new.coeff[(n + j, sp)] = d.coeff[(i, sp)].conj()
+            if (i, sp) in H:
+                H2[(n + j, sp)] = H[(i, sp)].conj()
+    return new, H2, int(add.size)
 
 
 # ------------------------------------------------------------------ structure helpers
@@ -238,6 +273,15 @@ class KSystem:
         self.warnings = list(mokp.warnings)
         self.checks: list[CheckResult] = []
         self._lowdin = {}
+        if not mokp.has_overlap and self.nmo == self.nao and len(mokp.coeff) == self.nk * self.ns:
+            # AO_EXPORT_TYPE GTO_BASIS: no S(k) in the file, but a complete MO set gives S = (C C†)^-1
+            for k in range(self.nk):
+                C = mokp.coeff[(k, 0)]
+                Sk = np.linalg.inv(C @ C.conj().T)
+                mokp.overlap[k] = 0.5 * (Sk + Sk.conj().T)
+            self.warnings = [w for w in self.warnings if "没有 S(k)" not in w]
+            self.warnings.append("MO_KP 没有导出 S(k)（AO_EXPORT_TYPE 为默认的 GTO_BASIS）；因为 NMO = NAO，已由 S = (C·C†)⁻¹ "
+                                 "重建。以后请直接写 AO_EXPORT_TYPE OVERLAP_MATRIX")
         if ks_files:
             need = [(s, k) for s in range(self.ns) for k in range(self.nk)]
             missing = [(s + 1, k + 1) for s, k in need if (s, k) not in ks_files]
@@ -259,6 +303,16 @@ class KSystem:
             self.warnings.append("未提供 KS 文件，H(k) 由 S·C·ε·C†·S 重建（仅当 NMO=NAO 时严格成立）")
         else:
             self.warnings.append("未提供 KS_CSR 文件且 NMO<NAO：COHP 不可用（COOP/COBI/电荷/PDOS 仍可计算）")
+        if self.nk > 1 and not self.mesh.full:
+            # time-reversal reduced mesh (CP2K default FULL_GRID F / SYMMETRY F): rebuild the −k half
+            d2, H2, nadd = unfold_time_reversal(mokp, self.H)
+            mesh2 = infer_mesh(d2.kpoints, d2.weights) if nadd else None
+            if mesh2 is not None and mesh2.full:
+                self.warnings.append(
+                    f"k 网格经时间反演约化（{self.nk} 个 k 点），已用 H(−k)=H(k)*、C(−k)=C(k)* 自动展开为完整网格 "
+                    f"{'×'.join(str(x) for x in mesh2.mesh)}（{d2.nkp} 个 k 点）")
+                self.d, self.H, self.mesh = d2, H2, mesh2
+                self.nk, self.kpts, self.wts = d2.nkp, d2.kpoints, d2.weights
         if self.structure.ambiguous:
             self.warnings.append("有原子分数坐标恰好位于 ±0.5 边界附近，CP2K 内部回卷方向可能不确定："
                                  + ", ".join(f"{self.structure.label(i)}({'abc'[ax]})" for i, ax in self.structure.ambiguous[:8])
@@ -322,16 +376,33 @@ class KSystem:
         cbm = float(vir_e.min()) if vir_e.size else None
         return vbm, cbm, partial
 
-    def fermi_estimate(self):
-        """Chemical potential estimate: energy where the occupation fraction crosses 1/2."""
+    def fermi_estimate(self, spin=None):
+        """Chemical potential estimate: energy where the occupation fraction crosses 1/2.
+
+        spin=None with two spin channels: each channel is analysed separately (the occupation is only
+        monotonic in energy within one channel) and the higher value is returned, so that all occupied
+        states lie below the zero also for fixed-moment calculations with two Fermi levels.
+        """
+        if spin is None and self.ns == 2:
+            return max(self.fermi_estimate(s) for s in range(self.ns))
         es, fs = [], []
         for (k, s), o in self.d.occ.items():
+            if spin is not None and s != spin:
+                continue
             es.append(self.eps_ev(k, s))
             fs.append(o / self.g)
         e = np.concatenate(es)
         f = np.concatenate(fs)
         order = np.argsort(e)
         e, f = e[order], f[order]
+        # Fermi-Dirac smearing: ln(f/(1-f)) = (mu - e)/kT is linear in e, which gives mu exactly even
+        # when it lies in a gap (linear interpolation of f across a gap would be far off).
+        m = (f > 1e-300) & (f < 1.0 - 1e-9)
+        if m.sum() >= 2 and np.ptp(e[m]) > 1e-6:
+            x = np.log(f[m] / (1.0 - f[m]))
+            slope, icpt = np.polyfit(e[m], x, 1)
+            if slope < 0 and np.max(np.abs(slope * e[m] + icpt - x)) < 1e-2 * max(1.0, float(np.max(np.abs(x)))):
+                return float(-icpt / slope)
         idx = np.where(f < 0.5)[0]
         if idx.size == 0:
             return float(e[-1])
@@ -351,7 +422,12 @@ class KSystem:
         if mode == "manual":
             return float(value), "手动指定"
         if mode == "fermi" or (mode == "auto" and partial):
-            return self.fermi_estimate(), "由占据数估计的费米能 (f=1/2)"
+            note = "由占据数估计的费米能 (f=1/2)"
+            if self.ns == 2:
+                ef = [self.fermi_estimate(s) for s in range(self.ns)]
+                if abs(ef[0] - ef[1]) > 0.02:
+                    note += f"；两个自旋通道的费米能不同 (α {ef[0]:.3f}, β {ef[1]:.3f} eV，固定磁矩计算)，取较高者"
+            return self.fermi_estimate(), note
         if mode == "midgap" and vbm is not None and cbm is not None:
             return 0.5 * (vbm + cbm), "带隙中点"
         if vbm is not None:
@@ -407,7 +483,8 @@ class KSystem:
         checks.append(CheckResult("电子数 Σ w·f", nel, ok, "" if electrons is None else f"期望 {electrons}"))
         # last exported MO must be (almost) empty
         last_occ = max(float(self.occ(k, s)[-1]) for k in range(self.nk) for s in range(self.ns))
-        checks.append(CheckResult("最高导出轨道占据数", last_occ, last_occ < 1e-6,
+        # with NMO = NAO every orbital is exported, so nothing can be missing even if the last one is occupied
+        checks.append(CheckResult("最高导出轨道占据数", last_occ, last_occ < 1e-6 or self.nmo == self.nao,
                                   "过大说明 ADDED_MOS 太少，可能遗漏占据态"))
         if self.has_S and self.mesh.full and self.nk > 1:
             # S(R=0) onsite diagonal should be exactly 1 for normalized AOs; deviation = aliasing of images
@@ -450,13 +527,34 @@ class KSystem:
         return status, notes
 
 
+def _matching_ks_sets(data: MOKPData, sets: dict, triangle="FULL", tol=1e-6):
+    """Labels of the KS file sets whose first matrix fulfils H C = S C ε with the .mokp data."""
+    if not data.has_overlap or (0, 0) not in data.coeff:
+        return []
+    C, S, e = data.coeff[(0, 0)], data.overlap[0], data.eig[(0, 0)]
+    SC = S @ C
+    out = []
+    for lab, files in sets.items():
+        try:
+            H = read_csr(files[(0, 0)], data.nao, triangle)
+        except Exception:
+            continue
+        if float(np.max(np.abs(H @ C - SC * e[None, :]))) < tol:
+            out.append(lab)
+    return out
+
+
 def load_system(mokp_path, ks_dir=None, ks_set=None, triangle="FULL", periodic="XYZ", progress=None):
     """Convenience loader. ks_set: label from find_ks_sets (None -> the only set / none)."""
     def p_mokp(f, t):
         if progress:
             progress(0.6 * f, t)
+    if not Path(mokp_path).is_file():
+        raise MOKPError(f"找不到 MO_KP 文件: {mokp_path}。CP2K 只有在输入中同时有 &KPOINTS（只算 Γ 点也要写 SCHEME GAMMA）"
+                        "和 &DFT/&PRINT/&MO_KP ON 时才会输出 .mokp；运行 `CP2K_BondDOS template` 可打印需要加入的输入段")
     data = read_mokp(mokp_path, progress=p_mokp)
     files = None
+    hints = []
     if ks_dir:
         sets = find_ks_sets(ks_dir)
         if sets:
@@ -464,18 +562,26 @@ def load_system(mokp_path, ks_dir=None, ks_set=None, triangle="FULL", periodic="
                 if len(sets) > 1:
                     # prefer the set that covers all (spin,k)
                     full = [lab for lab, fs in sets.items() if len(fs) == data.nkp * data.nspins]
-                    if len(full) == 1:
-                        ks_set = full[0]
+                    match = full if len(full) == 1 else _matching_ks_sets(data, {lab: sets[lab] for lab in full}, triangle)
+                    if len(match) == 1:
+                        ks_set = match[0]
+                        if len(full) > 1:
+                            hints.append("KS 文件夹中有多组文件（例如结构优化每一步各写一组），已按 HC = SCε 自动选中与 "
+                                         f".mokp 匹配的一组: {ks_set}")
                     else:
                         raise MOKPError("KS 文件夹中有多组文件，请选择一组: " + "; ".join(sets))
                 else:
                     ks_set = next(iter(sets))
             files = sets[ks_set]
+        else:
+            hints = diagnose_ks_folder(ks_dir)
 
     def p_ks(f, t):
         if progress:
             progress(0.6 + 0.4 * f, t)
-    return KSystem(data, files, triangle=triangle, periodic=periodic, progress=p_ks)
+    system = KSystem(data, files, triangle=triangle, periodic=periodic, progress=p_ks)
+    system.warnings.extend(hints)
+    return system
 
 
 def parse_atom_selection(text: str, natom: int, structure: Structure | None = None):

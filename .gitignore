@@ -9,3 +9,5 @@ results/
 *.mokp
 *.csr
 !tests/fixtures/*
+!tests/fixtures/**
+.venv-linux/

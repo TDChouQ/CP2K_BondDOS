@@ -1,0 +1,3 @@
+# command line only (Linux servers, no GUI)
+numpy>=1.24
+matplotlib>=3.7

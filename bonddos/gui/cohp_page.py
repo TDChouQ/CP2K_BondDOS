@@ -18,7 +18,10 @@ from ..plotting import draw_cohp
 from .common import (PlotPanel, Worker, dspin, combo, make_table, set_row, fmt, group, form, last_dir,
                      remember_dir, error_box)
 
-BASES = [("直接 Gaussian AO（默认）", "ao"), ("Löwdin 正交化（类 LOBSTER）", "lowdin")]
+BASES = [("直接 Gaussian AO（默认）", "ao"), ("Löwdin 正交化（ICOHP 数值偏大，仅定性）", "lowdin")]
+GAUGES = [("共价键能 E_cov：H − ½(ε_μ+ε_ν)S（默认，平移不变）", "ecov"),
+          ("相对能量零点：H − E_ref·S", "eref"),
+          ("原始 H（v1.0.0 的结果，依赖势能零点）", "raw")]
 RESOLUTIONS = [("不分解", "none"), ("按角动量 s/p/d/f", "l"), ("按磁量子数 (px, dxy…)", "lm"),
                ("按基组壳层", "shell"), ("逐个 AO", "ao")]
 SPINS = [("自动", "auto"), ("只算 α/up", "up"), ("只算 β/down", "down")]
@@ -49,7 +52,7 @@ class CohpPage(QWidget):
         self.ksset = QComboBox()
         self.ksdir.editingFinished.connect(self.refresh_sets)
         self.periodic = combo(PERIODIC)
-        self.triangle = combo([("完整矩阵 (UPPER_TRIANGULAR F)", "FULL"), ("上三角 (UPPER_TRIANGULAR T)", "UPPER")])
+        self.triangle = combo([("自动识别（完整矩阵或上三角）", "FULL"), ("上三角 (UPPER_TRIANGULAR T)", "UPPER")])
         self.electrons = QLineEdit()
         self.electrons.setPlaceholderText("可选，用于核对")
         b_load = QPushButton("读取并检查数据")
@@ -71,6 +74,8 @@ class CohpPage(QWidget):
 
         # ---------------- settings
         self.basis = combo(BASES)
+        self.gauge = combo(GAUGES)
+        self.gauge.setToolTip("只对直接 AO 表象的 COHP 有效；Löwdin 表象本身与势能零点无关")
         self.q_cohp = QCheckBox("COHP")
         self.q_coop = QCheckBox("COOP")
         self.q_cobi = QCheckBox("COBI")
@@ -88,7 +93,7 @@ class CohpPage(QWidget):
         self.eref = combo(EREFS)
         self.eref_val = QLineEdit()
         self.eref_val.setPlaceholderText("绝对能量 eV，如 CP2K 输出的 Fermi energy")
-        st = form(("COHP 表象", self.basis), ("计算的量", [self.q_cohp, self.q_coop, self.q_cobi]),
+        st = form(("COHP 表象", self.basis), ("AO-COHP 规范", self.gauge), ("计算的量", [self.q_cohp, self.q_coop, self.q_cobi]),
                   ("轨道分解", self.resolution), ("自旋", self.spins), ("展宽 FWHM", [self.fwhm, self.sigma_lbl]),
                   ("能窗", [self.emin, "~", self.emax]), ("能量步长", self.de), ("能量零点", self.eref),
                   ("手动零点", self.eref_val))
@@ -250,6 +255,7 @@ class CohpPage(QWidget):
     def _apply_settings(self):
         s = self.session.settings
         s.basis = self.basis.currentData()
+        s.cohp_gauge = self.gauge.currentData()
         qs = [q for q, c in (("cohp", self.q_cohp), ("coop", self.q_coop), ("cobi", self.q_cobi)) if c.isChecked()]
         if not qs:
             raise ValueError("请至少选择一种量（COHP/COOP/COBI）")
@@ -416,7 +422,11 @@ class CohpPage(QWidget):
     def _computed(self, results):
         self.progress.setValue(1000)
         self.status(f"完成：{len(results)} 根键")
-        self.log(f"[COHP] 计算完成 {len(results)} 根键；能量零点 {self.session.eref:.4f} eV")
+        self.log(f"[COHP] 计算完成 {len(results)} 根键；能量零点 {self.session.eref:.4f} eV；"
+                 f"AO-COHP 规范 {self.session.engine.gauge.upper()}")
+        for note in self.session.notes:
+            if note.startswith("AO 表象的原始 COHP"):
+                self.log(f"[COHP] 提示: {note}")
         self.fill_results()
         self.tabs.setCurrentIndex(1)
         if results:
@@ -594,6 +604,9 @@ class CohpPage(QWidget):
         if "PERIODIC" in cfg:
             self.periodic.setCurrentText(cfg["PERIODIC"].upper())
         self.basis.setCurrentIndex(1 if cfg.get("COHP_BASIS", "AO").upper().startswith("L") else 0)
+        i = self.gauge.findData(cfg.get("COHP_GAUGE", "ECOV").lower())
+        if i >= 0:
+            self.gauge.setCurrentIndex(i)
         res = cfg.get("ORBITAL_RESOLUTION", "L").lower()
         i = self.resolution.findData(res)
         if i >= 0:

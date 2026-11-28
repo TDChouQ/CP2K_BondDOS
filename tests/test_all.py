@@ -16,7 +16,7 @@ from bonddos.session import BondSession, BondRequest, parse_config, session_from
 from bonddos.population import populations  # noqa: E402
 from bonddos.dosfiles import read_dos_file  # noqa: E402
 from bonddos.dosanalysis import DosProject, DosOptions  # noqa: E402
-from bonddos.spectra import broaden, make_grid, curve_descriptors  # noqa: E402
+from bonddos.spectra import broaden, make_grid, curve_descriptors, trapz  # noqa: E402
 from supercell_ref import reference_integrals  # noqa: E402
 
 
@@ -36,7 +36,7 @@ def test_checks_pass(rks):
 @pytest.mark.parametrize("basis", ["ao", "lowdin"])
 def test_against_supercell(rks, basis):
     _, model, sysm = rks
-    eng = BondingEngine(sysm, BondingOptions(basis=basis))
+    eng = BondingEngine(sysm, BondingOptions(basis=basis, cohp_gauge="raw"))
     bonds = []
     for a, b in [(1, 2), (1, 3), (2, 3), (1, 1)]:
         bonds += eng.make_bond(a, b, all_images=True)
@@ -176,7 +176,7 @@ def test_dos_formats():
     fx = ROOT / "tests" / "fixtures"
     a = read_dos_file(fx / "Fe-ALPHA_k1_curve-1.pdos")[0]
     assert a.kpoint and a.spin == "alpha" and a.zero == "fermi" and a.fwhm == pytest.approx(0.1)
-    assert np.trapezoid(a.channels["d"], a.energy) == pytest.approx(5.0, abs=1e-3)
+    assert trapz(a.channels["d"], a.energy) == pytest.approx(5.0, abs=1e-3)
     t = read_dos_file(fx / "FeO-curve-1.dos")
     assert [x.spin for x in t] == ["alpha", "beta"]
     r = read_dos_file(fx / "TEST-k2-1.pdos")[0]
@@ -202,6 +202,6 @@ def test_wo3_band_center_and_merge():
 def test_broaden_area():
     g = make_grid(-10, 10, 0.005)
     y = broaden(np.array([0.0, 1.0]), np.array([1.0, 2.0]), g, 0.2)
-    assert np.trapezoid(y, g) == pytest.approx(3.0, rel=1e-6)
+    assert trapz(y, g) == pytest.approx(3.0, rel=1e-6)
     d = curve_descriptors(g, y)
     assert d.center == pytest.approx(2.0 / 3.0, abs=1e-4)
