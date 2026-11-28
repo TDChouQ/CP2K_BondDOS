@@ -9,7 +9,7 @@
 - **Linux、macOS 无界面命令行版**：`pip install git+https://github.com/TDChouQ/CP2K_BondDOS` 得到命令 `cp2k-bonddos`（只依赖 numpy、matplotlib）；`build_linux.sh` 生成单文件可执行程序（约 35 MB）；没有 PySide6 时不带参数运行会打印帮助而不是报错。
 - 新命令 `pdos`：由 `.mokp` 算任意原子/原子组的 PDOS、能带中心（d 带中心等）和电荷，原来只有图形界面能做。
 - `cohp --plot` 直接输出 −COHP/COOP/COBI 曲线图；`dos --scale`；`--version`。
-- 附带 GitHub Actions 配置 `ci/github-workflow-build.yml`（三个平台跑测试，自动构建 Linux 命令行程序和 Windows exe；在 GitHub 网页上把它放到 `.github/workflows/build.yml` 即可启用）。
+- GitHub Actions（`.github/workflows/build.yml`）：每次推送在 Linux/Windows/macOS 上跑测试，并自动构建 Linux 命令行程序和 Windows exe；推送 `v*` 标签时把两个文件附到对应的 Release。
 - 新增 `docs/使用教程.md`（从 CP2K 输入到结果解读的完整流程，数字均来自附带的 MnO 例子）。
 
 修复
