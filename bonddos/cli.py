@@ -73,12 +73,17 @@ def _legend_outside(fig):
     for a in fig.axes:
         if a.get_legend() is not None:
             a.get_legend().remove()
+    try:
+        fig.tight_layout()    # redo the layout without the in-axes legend (a long one had shrunk the axes)
+    except Exception:
+        pass
     uniq = {}
     for h, lab in zip(handles, labels):
         uniq.setdefault(lab, h)
-    if uniq:
+    if uniq:                  # placed outside; savefig(bbox_inches="tight") enlarges the canvas for it
+        ncol = 1 if len(uniq) <= 14 else 2
         ax.legend(list(uniq.values()), list(uniq.keys()), loc="upper left", bbox_to_anchor=(1.01, 1.0),
-                  frameon=False, fontsize=9, borderaxespad=0.0)
+                  frameon=False, fontsize=9, borderaxespad=0.0, ncol=ncol)
 
 
 def _save_cohp_plots(sess, folder, prefix, max_bonds=8):
@@ -201,8 +206,16 @@ def cmd_pdos(args):
         from .plotting import draw_lines, PlotStyle, apply_rc
         apply_rc()
         spin_plot = {0: "alpha", 1: "beta"} if sysm.ns == 2 else {0: "none"}
-        series = [dict(label=n, x=grid, y=cur[sp][n], spin=spin_plot[sp]) for sp in cur for n in names
-                  if n != "TDOS" or args.tdos]
+        want = [w.strip() for w in (args.plot_channels or "").split(",") if w.strip()]
+
+        def keep(n):
+            if n == "TDOS":
+                return args.tdos
+            if not want:
+                return True
+            ch = n.split("·", 1)[1] if "·" in n else "total"
+            return any(ch == w or (w != "total" and ch.startswith(w)) for w in want)
+        series = [dict(label=n, x=grid, y=cur[sp][n], spin=spin_plot[sp]) for sp in cur for n in names if keep(n)]
         fig = plt.figure(figsize=(6.4, 4.2), dpi=150)
         draw_lines(fig, series, PlotStyle(xmin=args.emin, xmax=args.emax))
         _legend_outside(fig)
@@ -245,9 +258,12 @@ def cmd_dos(args):
         from .plotting import draw_lines, PlotStyle, apply_rc
         apply_rc()
         fig = plt.figure(figsize=(6.4, 4.2), dpi=150)
-        draw_lines(fig, [dict(label=f"{s.name}·{s.channel}", x=s.x, y=s.y, spin=s.spin) for s in series],
+        import re as _re
+        draw_lines(fig, [dict(label=_re.sub(r"\[(alpha|beta)\]", "", f"{s.name}·{s.channel}"), x=s.x, y=s.y,
+                              spin=s.spin) for s in series],
                    PlotStyle(xmin=args.emin, xmax=args.emax))
-        fig.savefig(args.plot, dpi=300)
+        _legend_outside(fig)
+        fig.savefig(args.plot, dpi=300, bbox_inches="tight")
         print("图片 ->", args.plot)
     return 0
 
@@ -348,6 +364,8 @@ def build_parser():
     a.add_argument("--stats")
     a.add_argument("--charges")
     a.add_argument("--plot")
+    a.add_argument("--plot-channels", metavar="total,d,...",
+                   help="图中只画这些通道（前缀匹配：d 包括 dxy…dx2-y2）；CSV 和统计不受影响")
     a.set_defaults(func=cmd_pdos)
     m = sub.add_parser("merge_pdos", help="合并 PDOS -> merged_pdos.dat")
     m.add_argument("files", nargs="+")

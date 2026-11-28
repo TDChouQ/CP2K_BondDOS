@@ -35,7 +35,7 @@ jobs:
           - os: ubuntu-22.04
             spec: CP2K_BondDOS_cli.spec
             reqs: requirements-cli.txt
-            artifact: dist/cp2k-bonddos
+            artifact: dist/cp2k-bonddos-linux-x86_64
             name: cp2k-bonddos-linux-x86_64
           - os: windows-latest
             spec: CP2K_BondDOS.spec
@@ -50,6 +50,9 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r ${{ matrix.reqs }} pyinstaller
       - run: python -m PyInstaller --noconfirm --clean ${{ matrix.spec }}
+      - name: rename the Linux binary
+        if: runner.os == 'Linux'
+        run: mv dist/cp2k-bonddos dist/cp2k-bonddos-linux-x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}

@@ -138,8 +138,21 @@ def draw_lines(fig, series, st: PlotStyle, ylabel="DOS (states/eV)", fermi=0.0):
     if st.title:
         ax.set_title(st.title, fontsize=st.font_size * 1.05, color=INK)
     if st.legend and len({s['label'] for s in series}) >= 2:
-        ax.legend(fontsize=st.font_size * 0.85, frameon=False, loc="best")
-    fig.tight_layout()
+        # one entry per label (alpha and beta of the same series share colour and label)
+        handles, labels = ax.get_legend_handles_labels()
+        uniq = {}
+        for h, lab in zip(handles, labels):
+            uniq.setdefault(lab, h)
+        if len(uniq) <= 6:
+            ax.legend(list(uniq.values()), list(uniq.keys()), fontsize=st.font_size * 0.85, frameon=False, loc="best")
+        else:             # long legends go beside the axes so that they never cover the curves
+            ax.legend(list(uniq.values()), list(uniq.keys()), fontsize=st.font_size * 0.8, frameon=False,
+                      loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
+                      ncol=1 if len(uniq) <= 16 else 2)
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
     return ax
 
 
